@@ -1,7 +1,5 @@
-# R project template
+# R Manuscript
 
-This repo serves as a template for the `data science in R: project` class.
+This repo serves as data documentation for the submitted manuscript Education as risk factor of mild cognitive impairment: the link to the gut microbiome.
 
-You can run this project using the following mybinder link:
-
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/xcit-lab/r_project_template/HEAD)
+This project is licensed under the terms of the MIT license.
