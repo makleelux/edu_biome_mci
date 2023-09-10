@@ -1,0 +1,153 @@
+---
+title: 'Tidymodels example: Hotels'
+author: "xCIT"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+    numbered_sections: true
+    theme: cerulean
+    code_folding: hide
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../outputs/R_notebook/") })
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This is a template project for the data science in R project class.
+
+All of the code, data and images are taken from the [tidymodels website](https://www.tidymodels.org/start/case-study/).
+
+<img src="../media/hotel.jpg" alt="hotel" style="width:400px;"/>
+
+
+
+```{r load_packages, message=FALSE, warning=FALSE, echo=FALSE}
+library(tidyverse)
+library(tidymodels)  
+
+source('../R/custom_plots.R', echo=FALSE)
+```
+
+## The Question
+
+How accurately can we predict which hotel stays included children and/or babies based on a set of features (e.g., the cost of the stay)?
+
+
+## The Data
+
+
+```{r load_data, message=FALSE, warning=FALSE, echo=FALSE}
+hotels <- 
+  read_csv('../data/hotels.csv') %>% 
+  mutate_if(is.character, as.factor)
+```
+
+```{r data_table}   
+hotels
+```
+
+
+```{r data_split}
+set.seed(123)
+splits      <- initial_split(hotels, strata = children)
+
+hotel_other <- training(splits)
+hotel_test  <- testing(splits)
+
+set.seed(234)
+val_set <- validation_split(hotel_other, 
+                            strata = children, 
+                            prop = 0.80)
+```
+
+
+## The Model
+
+```{r model_fitting, message=FALSE, warning=FALSE, echo=FALSE}
+lr_mod <- 
+  logistic_reg(penalty = tune(), mixture = 1) %>% 
+  set_engine("glmnet")
+
+holidays <- c("AllSouls", "AshWednesday", "ChristmasEve", "Easter", 
+              "ChristmasDay", "GoodFriday", "NewYearsDay", "PalmSunday")
+
+lr_recipe <- 
+  recipe(children ~ ., data = hotel_other) %>% 
+  step_date(arrival_date) %>% 
+  step_holiday(arrival_date, holidays = holidays) %>% 
+  step_rm(arrival_date) %>% 
+  step_dummy(all_nominal(), -all_outcomes()) %>% 
+  step_zv(all_predictors()) %>% 
+  step_normalize(all_predictors())
+
+
+lr_workflow <- 
+  workflow() %>% 
+  add_model(lr_mod) %>% 
+  add_recipe(lr_recipe)
+
+
+lr_reg_grid <- tibble(penalty = 10^seq(-4, -1, length.out = 30))
+
+
+lr_res <- 
+  lr_workflow %>% 
+  tune_grid(val_set,
+            grid = lr_reg_grid,
+            control = control_grid(save_pred = TRUE),
+            metrics = metric_set(roc_auc))
+
+  
+```
+
+
+
+```{r plot_auc_by_penalty} 
+lr_plot <- 
+  lr_res %>% 
+  collect_metrics() %>% 
+  plot_auc_by_penalty()
+lr_plot 
+```
+
+Top 5 models: 
+
+```{r} 
+
+top_models <-
+  lr_res %>% 
+  show_best("roc_auc", n = 5) %>% 
+  arrange(penalty) 
+top_models
+
+```
+
+```{r} 
+lr_best <- 
+  lr_res %>% 
+  collect_metrics() %>% 
+  arrange(penalty) %>% 
+  slice(12)
+
+lr_auc <- 
+  lr_res %>% 
+  collect_predictions(parameters = lr_best) %>% 
+  roc_curve(children, .pred_children) %>% 
+  mutate(model = "Logistic Regression")
+
+autoplot(lr_auc)
+```
+
+## The Answer
+
+Using penalized logistic regression we achieve a prediction accuracy (quantified as the ROC AUC) of `r round(lr_best$mean, 2)`.
+
+

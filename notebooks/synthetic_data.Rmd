@@ -1,0 +1,155 @@
+---
+title: "Generation of synthetic versions of a dataframe"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+    numbered_sections: true
+    theme: cerulean
+    code_folding: hide
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "../outputs/R_notebook/") })
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, echo=FALSE, message=FALSE)
+```
+
+
+
+## About
+
+We want to create a synthetic dataset from an existing one. The synthetics dataset must have the same columns as the original dataset and the values within each columns must of the same type as those in the original dataset.
+
+
+Why is this useful?
+
+Reasons for creating synthetic datasets inlcude:
+
+  - anonymizing datasets
+  - create dummy datasets for testing code
+
+## Requirements
+
+For this tutorial we will use the following packages:
+
+ - tidyverse: (default) for basic data manipulation
+ - wakefield: to create a dataset with different kinds of columns
+ - synthpop: to synthesize a dataset
+
+Make sure you have these packages installed before running the code below.
+
+```{r}
+
+## install packages if needed
+# install.packages("synthpop")
+# install.packages("wakefield")
+# install.packages("tidyverse")
+
+## load packages
+library(tidyverse)
+library(wakefield)
+library(synthpop)
+
+```
+
+
+## Step 1. Create a fake dataset
+
+We use the `wakefield` package and the code described [here](https://github.com/trinker/wakefield) to generate a fake dataset.
+
+
+
+```{r}
+
+df <- r_data_frame(
+    n = 10,
+    id,
+    race,
+    age,
+    sex,
+    hour,
+    iq,
+    height,
+    died
+)
+
+df
+
+```
+
+
+## Step 2. Synthesize data
+
+If your dataset contains variables whose values can more or less directly identify a person (e.g., IP_address, full_name), you need to change/remove those values manually.
+
+Below are two methods to create a mock-up data based on a given dataset.
+
+
+### Variant 1: Destroy relationships in the dataset
+
+A simple methods to create a mock-up of a dataset is to shuffle the rows within each column of the original dataset. The consequence of this procedure is a dataset that has the same size and shape as the original dataset but is anonymized. Note however that the relationships between variables are not preserved by this method. For example, if in the original dataset there is a correlation between IQ and Height, this relationship will not exist (or exist by chance) in the mock-up dataset. 
+
+Thus, while mock-up data created using this method can be used to test code and be confident that that code will also run on actual data, the results you get with the mock-up data are unrelated to the results you will get using the actual data.
+
+First, we define a custom function that loops over all columns of a dataframe and shuffles the rows within the column:
+
+```{r}
+shuffle_cols <- function(df){
+  row_n <- nrow(df)
+  col_n <- ncol(df)
+  for (i in 2:col_n){
+    random_order <- sample(row_n)
+    df[,i] <- df[random_order,i]
+  }
+  df  
+}
+```
+
+
+Then we apply that function to the original dataset to create a synthetic dataset:
+
+```{r} 
+df_shuffle <- shuffle_cols(df)
+df_shuffle
+```
+
+### Variant 2: Preserve relationships in the dataset
+
+Synthesizing data while preserving relationships is harder to do. Luckily, there's an R package for this (for more details, see [this](https://www.synthpop.org.uk/get-started.html).
+
+```{r}
+# using the syn package is very easy...
+mysyn <- syn(df)
+
+# ... but the outpout of that function is not dataframe. Thus we need to extract data from mysyn (and arrange it by ID)
+mysyn <- mysyn$syn %>% arrange(ID)
+mysyn
+```
+
+Note: `syn()` did not keep the data format for the boolean variable `Died`. To keep the datasets consistent, you need to reformat that columns. One might want to investigate the documentation about this behavior or contact the package creator about this specific point. One might also want here to create a wrapper around `syn()` that outputs a dataframe directly, orders rows by an ID variable and keeps booleans as booleans. 
+
+
+```{r}
+mysyn <- mysyn %>% mutate(Died = ifelse(Died == 1, FALSE, TRUE))
+mysyn
+```
+
+Note: `shuffle_cols()` preserves the actual values within each column but destroys the relationships between columns; `syn()` on the other hand, aims to maintain the relationships between variables but alters the values. You can see this for yourself by inspecting the values of a variable across datasets: 
+
+```{r}
+print(sort(df$Age))    
+print(sort(df_shuffle$Age))    
+print(sort(mysyn$Age))
+```
+
+
+### Variant 3: combine both measures
+
+If you fancy, you can also apply both of the previous methods successively.
+
+
