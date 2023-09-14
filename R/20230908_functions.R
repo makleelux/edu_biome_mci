@@ -357,7 +357,7 @@ ds2_main_var <- function(phylo_list, var, adjust){
       lapply(
         data.frame(combn(levels(as_factor(unlist(sample_data(phylo_obj)[,var]))), 2)),
         function(x) data.frame(results(ds2,
-                                       contrast = c(var, x[1], x[2]),
+                                       contrast = c(var, x[2], x[1]),
                                        alpha = 0.05),
                                Taxon = rownames(ds2),
                                Contrast = paste(x[1], x[2], sep = "."))))
