@@ -1,0 +1,658 @@
+---
+title: 'Education as risk factor of mild cognitive impairment: the link to the gut microbiome'
+author: "MAKLEE & VTEA"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: yes
+mainfont: Arial
+fontsize: 11pt
+---
+
+```{r setup, include=FALSE}
+library("knitr")
+knitr::opts_chunk$set(echo=FALSE)
+knitr::opts_chunk$set(message=FALSE)
+knitr::opts_chunk$set(warning=FALSE)
+knitr::opts_chunk$set(include=FALSE)
+knitr::opts_chunk$set(results=FALSE)
+
+# Set random seed for reproducibility
+set.seed(3587)
+
+# Higher resolution for figures
+knitr::opts_chunk$set(dpi=300)
+options(knitr.kable.NA = '')
+```
+
+```{r packages}
+source("./R/20230908_functions.R")
+
+# pipeline init
+library("targets")
+library("tarchetypes")
+
+# Graphical output
+library("tidyverse")
+library("ggpubr")
+library("cowplot")
+library("gridExtra")
+library("kableExtra")
+library("ggbeeswarm")
+
+# Analyses
+library("phyloseq")
+library("vegan")
+library("LDM")
+```
+
+The following chunk is run once to initialize the pipeline, which 
+
+* merges clinical and 16S rRNA sequencing data (phyloseq object)
+* computes metrics of alpha diversity and beta dispersion
+* tests differential abundance
+* tests mediation with CMAverse
+
+See _targets.R for more information.
+
+```{r init, echo=TRUE, include=TRUE}
+# tar_make()
+```
+
+```{r colors}
+# Color variables
+group_cols <- list(
+  Age_categorical = setNames(
+    c("darkseagreen2", "darkseagreen3", "khaki"),
+    c("<65", "65-69", "70+")),
+  Years_of_Education = setNames(
+    c("gray60", "deepskyblue4", "deepskyblue2"),
+    c("0-10", "11-16", "16+")),
+  MCI = setNames(
+    c("tomato", "tomato4"),
+    c("NC", "MCI")))
+```
+
+```{css include=TRUE}
+.kable_wrapper > tbody > tr > td {
+    vertical-align: top;
+}
+```
+
+***
+
+All analyses were run in R (`r R.version$version.string`). Please note the session info for package version information.
+
+***
+
+```{r session, include=TRUE, results=TRUE}
+sessionInfo()
+```
+
+# Manuscript
+## Table 1. Baseline Characteristics of Participants.
+
+```{r clin_summary, results=TRUE, include=TRUE}
+vars = tar_read(clin_vars)
+clin_summaries <- tar_read(ncer_adiv) %>% clin_summary("MCI", vars)
+
+# for all set 1, for those with gut microbiome data available set 2
+clin_summaries %>% 
+  kable(booktabs = TRUE, digits = c(NA, NA, 3, NA)) %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+```
+
+Note. T = Student’s t-Test, Fisher = Fisher’s Exact Test. Numbers refer to means ± standard deviations for continuous, n for categorical characteristics. BMI = body mass index, BDI-I = Beck Depression Inventory I, APOE = apolipoprotein ε4 status.
+
+```{r descriptives, results=TRUE, include=TRUE}
+cat("Mean age (SD) age of participants =", format(round(mean(tar_read(ncer_adiv)$Age), 1), nsmall = 1), "(", format(round(sd(tar_read(ncer_adiv)$Age), 1), nsmall = 1), ") years")
+```
+
+## Table 2. Taxonomic Analysis Across Groups of Education (DESeq2). {.tabset}
+
+### Basic Adjustments
+
+```{r DESeq2 basic, results=TRUE, include=TRUE}
+tar_read(dseq2_edu) %>% subset(Contrast %in% c("low.int", "low.high")) %>% ds2_restable(wide = T)
+```
+
+Adjusted for age, sex/gender, BMI, and use of antibiotic medication in the last 6 months. 
+
+### Basic + Further Adjustments
+
+```{r DESeq2 further, results=TRUE, include=TRUE}
+tar_read(dseq2_edu_further) %>% subset(Contrast %in% c("low.int", "low.high")) %>% ds2_restable(wide = T)
+```
+
+Adjusted for age, sex/gender, BMI, use of antibiotic medication in the last 6 months, BDI-I, first language, and partnership status.
+
+### Basic + Further Adjustments + APOE
+
+```{r DESeq2 further APOE, results=TRUE, include=TRUE}
+tar_read(dseq2_edu_further_apoe) %>% subset(Contrast %in% c("low.int", "low.high")) %>% ds2_restable(wide = T)
+```
+
+Adjusted for age, sex/gender, BMI, use of antibiotic medication in the last 6 months, BDI-I, first language, partnership status and APOE. 
+
+## Table 2. Taxonomic Analysis Across Groups of Education (ANCOM-BC). {.tabset}
+
+### Basic Adjustments
+
+```{r ancombc basic, results=TRUE, include=TRUE}
+tar_read(ancombc_edu) %>% 
+  mutate(Contrast = sub("Years_of_Education", "low\\.", Contrast)) %>% 
+  subset(Contrast %in% c("low.int", "low.high")) %>% 
+  abc_restable(wide = T)
+```
+
+Adjusted for age, sex/gender, BMI, and use of antibiotic medication in the last 6 months. 
+
+### Basic + Further Adjustments
+
+```{r ancombc further, results=TRUE, include=TRUE}
+tar_read(ancombc_edu_further) %>% 
+  mutate(Contrast = sub("Years_of_Education", "low\\.", Contrast)) %>% 
+  subset(Contrast %in% c("low.int", "low.high")) %>% 
+  abc_restable(wide = T)
+```
+
+Adjusted for age, sex/gender, BMI, use of antibiotic medication in the last 6 months, BDI-I, first language, and partnership status.
+
+### Basic + Further Adjustments + APOE
+
+```{r ancombc basic further APOE, results=TRUE, include=TRUE}
+tar_read(ancombc_edu_further_apoe) %>% 
+  mutate(Contrast = sub("Years_of_Education", "low\\.", Contrast)) %>% 
+  subset(Contrast %in% c("low.int", "low.high")) %>% 
+  abc_restable(wide = T)
+```
+
+Adjusted for age, sex/gender, BMI, use of antibiotic medication in the last 6 months, BDI-I, first language, partnership status and APOE. 
+
+## Table 3. Mediation Analysis with Chao1 as Mediator. {.tabset}
+
+Note. Results of mediation analysis with interaction terms of education and Chao1 in the outcome model. Standard errors were estimated with 2000 bootstraps. * P Value < .05, ** P Value < .01, *** P Value < .001. Rcde: controlled direct effect odds ratio (referring to CDE); Rpnde: pure natural direct effect odds ratio (referring to NDE); Rtnde: total natural direct effect odds ratio; Rpnie: pure natural indirect effect odds ratio; Rtnie: total natural indirect effect odds ratio (referring to NIE); Rte: total effect odds ratio; Ercde: excess relative risk due to controlled direct effect; Erintref: excess relative risk due to reference interaction; Erintmed: excess relative risk due to mediated interaction; Erpnie: excess relative risk due to pure natural indirect effect; Ercde(P): proportion Ercde; Erintref(P): proportion Erintref; Erintmed(P): proportion Erintmed; Erpnie(P): proportion Erpnie; pm: overall proportion mediated; int: overall proportion attributable to interaction; pe: overall proportion eliminated). Cells with – indicate n/a.
+
+### 0-10 vs. 11-16
+
+```{r cmest result Chao1 11, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_Chao1), cap = "11-16 vs. 0-10 YEDU - Chao1 - no interaction")
+```
+
+### 0-10 vs. 16+
+
+```{r cmest result Chao1 16, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_Chao1), cap = "16+ vs. 0-10 YEDU - Chao1 - no interaction")
+```
+
+### 0-10 vs. 11-16 multinomial
+
+```{r cmest result Chao1 11 mult, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_Chao1_multi), cap = "11-16 vs. 0-10 YEDU - Chao1 - no interaction - multinomial")
+```
+
+### 0-10 vs. 16+ multinomial
+
+```{r cmest result Chao1 16 mult, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_Chao1_multi), cap = "16+ vs. 0-10 YEDU - Chao1 - no interaction - multinomial")
+```
+
+### 0-10 vs. 11-16 with interaction
+
+```{r cmest result Chao1 11 int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_Chao1_int), cap = "11-16 vs. 0-10 YEDU - Chao1 - with interaction")
+```
+
+### 0-10 vs. 16+ with interaction
+
+```{r cmest result Chao1 16 int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_Chao1_int), cap = "16+ vs. 0-10 YEDU - Chao1 - with interaction")
+```
+
+### 0-10 vs. 11-16 multinomial with interaction
+
+```{r cmest result Chao1 11 mult int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_Chao1_int_multi), cap = "11-16 vs. 0-10 YEDU - Chao1 - with interaction - multinomial")
+```
+
+### 0-10 vs. 16+ multinomial with interaction
+
+```{r cmest result Chao1 16 mult int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_Chao1_int_multi), cap = "16+ vs. 0-10 YEDU - Chao1 - with interaction - multinomial")
+```
+
+## Mediation with LDM
+
+```{r ldm, echo=TRUE, eval=FALSE}
+# run once by setting eval=TRUE
+otu_tab = tar_read(ncer_phyloseqs)[["Genus"]] %>% otu_table() %>% t() %>% as.data.frame()
+
+res.ldm.med <- ldm(formula = otu_tab | 
+                     (Age + Gender + ATB_in_last_6_months + First_Language + APOE4 + BDI_I_mild + Living_With_Partner) ~
+                       (Years_of_Education) + # exposure
+                       (MCI), # outcome
+                     data=tar_read(ncer_adiv), 
+                     seed=67817, 
+                     n.cores=12, 
+                     test.mediation=TRUE, 
+                     test.omni3 = T)
+save(res.ldm.med, file = "./20230915resldmmed.RData")
+
+res.perm.med = permanovaFL(formula = otu_tab | 
+                             (Age + Gender + ATB_in_last_6_months + First_Language + APOE4 + BDI_I_mild + Living_With_Partner) ~ 
+                               (Years_of_Education) + # exposure
+                               (MCI), # outcome
+                             data=tar_read(ncer_adiv), 
+                             seed=82955, 
+                             test.mediation = T,
+                             dist.method = c("jaccard", "bray"),
+                             binary = c(TRUE, FALSE))
+save(res.perm.med, file = "./20230915respermmed.RData")
+```
+
+
+```{r ldm result, results=TRUE, include=TRUE}
+load(file = "./20230915resldmmed.RData")
+load(file = "./20230915respermmed.RData")
+
+# global test 
+res_temp = paste0("------------------------------------------------------------------ \n", "\n",
+                  "LDM results \n",
+                  "identified otus: ", res.ldm.med$med.detected.otu.omni3, "\n",
+                  "identified otus q value: ", res.ldm.med$q.otu.omni3[,res.ldm.med$med.detected.otu.omni3], "\n",
+                  "ldm-med global omni3 p = ", res.ldm.med$med.p.global.omni3, "\n",
+                  "bivariate association of exposure and microbiome: ", res.ldm.med$p.global.omni3[1], "\n",
+                  "bivariate association of microbiome and outcome conditional on exposure: ", res.ldm.med$p.global.omni3[2], "\n",
+                  "number of permutations completed: ", res.ldm.med$n.perm.completed, "\n",
+                  "stopping criterion met by all global tests: ", res.ldm.med$global.tests.stopped, "\n",
+                  "stopping criterion met by all OTU-specific tests: ", res.ldm.med$otu.tests.stopped, "\n", 
+                  "\n", "------------------------------------------------------------------ \n", "\n",
+                  "PermanovaFL results \n",
+                  "permanova-med global omni p = ", res.perm.med$med.p.permanova.omni, "\n",
+                  "permanova per jaccard p = ", res.perm.med$med.p.permanova[1], "\n",
+                  "permanova per bray p = ", res.perm.med$med.p.permanova[2], "\n",
+                  "number of permutations completed: ", res.perm.med$n.perm.completed, "\n",
+                  "stopping criterion met by all tests of covariates: ", res.perm.med$permanova.stopped, "\n", 
+                  "\n", "------------------------------------------------------------------")
+
+cat(res_temp)
+```
+
+## Figure 1. Alpha Diversity Across Age and Education Groups.
+
+```{r adiv edu and age, fig.height=10, fig.width=5, fig.align='center', include=TRUE}
+comparisons = "<65"
+
+#png(filename = paste0("./plots/20230910/alpha_per_age_by_edu.png"), width = 8, height = 14, res = 600, units = "in")
+grid.arrange(
+  mean_cl_and_bees(tar_read(ncer_adiv), "Age_categorical", "Chao1", "t.test", comparisons = comparisons) + facet_wrap(~Years_of_Education),
+  mean_cl_and_bees(tar_read(ncer_adiv), "Age_categorical", "Shannon", "t.test", comparisons = comparisons) + facet_wrap(~Years_of_Education),
+  mean_cl_and_bees(tar_read(ncer_adiv), "Age_categorical", "InvSimpson", "t.test", comparisons = comparisons) + facet_wrap(~Years_of_Education),
+  nrow = 3)
+#dev.off()
+```
+
+Note. Panels show results stratified by age and education groups with 0-10, 11-16 and 16+ years of education. Reported P values refer to Student’s t-Tests. InvSimpson = Inverse Simpson. Author MK.
+
+## Figure 2. Ordination Plots for Education Groups.
+
+```{r ord_all beta}
+hc_ord <- tar_read(ncer_bdiv)
+```
+
+### A ANOVA
+
+```{r ord_all beta anova, results=TRUE, include=TRUE}
+# multivariate homogeneity of groups dispersions, tested with anova:
+betadisper <- betadisper(hc_ord$dist, as(sample_data(tar_read(ncer_phyloseqs)$Genus), "data.frame")$Years_of_Education)
+anova(betadisper) %>% 
+  kable(digits = c(0, 2, 2, 2, 3), booktabs = TRUE) %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+```
+
+```{r ord_all ancomb}
+# Plot
+var = "Years_of_Education"
+beta_edu = plot_ordination(hc_ord$phyloseq, hc_ord$ord, color = var) +
+  theme_bw(base_size = 14) + 
+  coord_fixed(xlim = c(-1, 1.5), ylim = c(-.7,1.1)) +
+  stat_ellipse() +
+  scale_color_manual(name = "Education Groups", values = group_cols[[var]]) +
+  labs(caption = paste("p (adonis2) =", tar_read(ad2_test_edu)[1,5], "\n", "stress =", format(round(hc_ord$ord$stress, digits = 2), nsmall = 2))) + 
+  theme(panel.grid = element_blank(), text = element_text(size = 10))
+```
+
+```{r ord_all_65 beta}
+# plot ordination custom (adonis2 & NMDS)
+hc_ord65 <- tar_read(ncer_bdiv65)
+```
+
+### B ANOVA
+
+```{r ord_all_65 beta anova, results=TRUE, include=TRUE}
+# multivariate homogeneity of groups dispersions, tested with anova:
+betadisper <- betadisper(hc_ord65$dist, as(sample_data(hc_ord65$phyloseq), "data.frame")$Years_of_Education)
+anova(betadisper) %>% 
+  kable(digits = c(0, 2, 2, 2, 3), booktabs = TRUE) %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+```
+
+```{r ord_all_65 ancomb}
+# Plot
+var = "Years_of_Education"
+beta_edu65 = plot_ordination(hc_ord65$phyloseq, hc_ord65$ord, color = var) +
+  theme_bw(base_size = 14) + 
+  coord_fixed(xlim = c(-1, 1.5), ylim = c(-.7,1.1)) +
+  stat_ellipse() +
+  scale_color_manual(name = "Education Groups", values = group_cols[[var]]) +
+  labs(caption = paste("p (adonis2) =", tar_read(ad2_test_edu65)[1,5], "\n", "stress =", format(round(hc_ord65$ord$stress, digits = 2), nsmall = 2))) + 
+  theme(panel.grid = element_blank(), text = element_text(size = 10))
+```
+
+```{r disp plot, results=TRUE, include=TRUE, fig.align='center', fig.width=5, fig.height=10}
+#png(filename = paste0("./plots/20230910/plot_beta_edu_full.png"), width = 5, height = 5, res = 600, units = "in")
+plot_grid(beta_edu, 
+          beta_edu65, 
+          labels=c("A", "B"), ncol = 1, nrow = 2)
+#dev.off()
+```
+
+Note. Ordination using Non-metric Multidimensional Scaling based on Bray-Curtis dissimilarity. P value (adonis2) adjusted for gender, age, ATB, BDI-I, first language, PS, and APOE. Ordination using Non-metric Multidimensional Scaling based on Bray-Curtis dissimilarity. A Full sample. B Restricted sample age 65 and older. Authors MK and VTEA.
+
+# Supplement
+## Table 1. Coefficients of Regression Models with Chao1. {.tabset}
+
+### Without interaction
+
+```{r coef, results=TRUE, include=TRUE}
+cmest_coef_ci(tar_read(res11_Chao1))
+```
+
+### With interaction
+
+```{r coef int, results=TRUE, include=TRUE}
+cmest_coef_ci(tar_read(res11_Chao1_int))
+```
+
+Note. Regression coefficients for mediator and outcome models, used for mediation analysis with alpha diversity measures. All analyses were adjusted for age, sex/gender, ATB, BDI-I, first language, PS and APOE. * P Value < .05, ** P Value < .01, *** P Value < .001.
+
+## Table 2. Coefficients of Regression Models with Shannon. {.tabset}
+
+### Without interaction
+
+```{r coef 2, results=TRUE, include=TRUE}
+cmest_coef_ci(tar_read(res11_Shannon))
+```
+
+### With interaction
+
+```{r coef 2 int, results=TRUE, include=TRUE}
+cmest_coef_ci(tar_read(res11_Shannon_int))
+```
+
+Note. Regression coefficients for mediator and outcome models, used for mediation analysis with alpha diversity measures. All analyses were adjusted for age, sex/gender, ATB, BDI-I, first language, PS and APOE. * P Value < .05, ** P Value < .01, *** P Value < .001.
+
+## Table 3. Coefficients of Regression Models with Inverse Simpson. {.tabset}
+
+### Without interaction
+
+```{r coef 3, results=TRUE, include=TRUE}
+cmest_coef_ci(tar_read(res11_InvSimpson))
+```
+
+### With interaction
+
+```{r coef 3 int, results=TRUE, include=TRUE}
+cmest_coef_ci(tar_read(res11_InvSimpson_int))
+```
+
+Note. Regression coefficients for mediator and outcome models, used for mediation analysis with alpha diversity measures. All analyses were adjusted for age, sex/gender, ATB, BDI-I, first language, PS and APOE. * P Value < .05, ** P Value < .01, *** P Value < .001.
+
+## Table 4. Mediation Analysis with Shannon Index as Mediator. {.tabset}
+
+### 0-10 vs. 11-16
+
+```{r cmest result Shannon 11, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_Shannon), cap = "11-16 vs. 0-10 YEDU - Shannon - no interaction")
+```
+
+### 0-10 vs. 16+
+
+```{r cmest result Shannon 16, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_Shannon), cap = "16+ vs. 0-10 YEDU - Shannon - no interaction")
+```
+
+### 0-10 vs. 11-16 with interaction
+
+```{r cmest result Shannon 11 int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_Shannon_int), cap = "11-16 vs. 0-10 YEDU - Shannon - with interaction")
+```
+
+### 0-10 vs. 16+ with interaction
+
+```{r cmest result Shannon 16 int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_Shannon_int), cap = "16+ vs. 0-10 YEDU - Shannon - with interaction")
+```
+
+## Table 5. Mediation Analysis with Inverse Simpson as Mediator. {.tabset}
+
+### 0-10 vs. 11-16
+
+```{r cmest result Inverse Simpson 11, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_InvSimpson), cap = "11-16 vs. 0-10 YEDU - InvSimpson - no interaction")
+```
+
+### 0-10 vs. 16+
+
+```{r cmest result Inverse Simpson 16, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_InvSimpson), cap = "16+ vs. 0-10 YEDU - InvSimpson - no interaction")
+```
+
+### 0-10 vs. 11-16 with interaction
+
+```{r cmest result Inverse Simpson 11 int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res11_InvSimpson_int), cap = "11-16 vs. 0-10 YEDU - InvSimpson - with interaction")
+```
+
+### 0-10 vs. 16+ with interaction
+
+```{r cmest result Inverse Simpson 16 int, results=TRUE, include=TRUE}
+neat_cmest_res(tar_read(res16_InvSimpson_int), cap = "16+ vs. 0-10 YEDU - InvSimpson - with interaction")
+```
+
+## Table 6. Taxonomic Classification of Identified Taxa.
+
+```{r tax class, include=TRUE, results=TRUE}
+top_hits = tar_read(dseq2_edu_further_apoe) %>% select(Taxon, Contrast, Level, padj) %>% 
+  rbind(tar_read(dseq2_edu_further) %>% select(Taxon, Contrast, Level, padj)) %>%
+  rbind(tar_read(dseq2_edu) %>% select(Taxon, Contrast, Level, padj)) %>% 
+  rbind(tar_read(ancombc_edu) %>% select(Taxon, Contrast, Level, q_val) %>% mutate(padj = q_val) %>% select(-q_val)) %>%
+  rbind(tar_read(ancombc_edu_further) %>% select(Taxon, Contrast, Level, q_val) %>% mutate(padj = q_val) %>% select(-q_val)) %>%
+  rbind(tar_read(ancombc_edu_further_apoe) %>% select(Taxon, Contrast, Level, q_val) %>% mutate(padj = q_val) %>% select(-q_val)) %>%
+  filter(Contrast %in% c("low.int", "low.high") | 
+           Contrast %in% c("Years_of_Educationint", "Years_of_Educationhigh")) %>% 
+  filter(padj < .05) %>% 
+  select(Taxon, Level)
+
+distinct_hits = distinct(top_hits)
+class_tab = data.frame(
+  Domain = character(0), 
+  Phylum = character(0), 
+  Class = character(0), 
+  Order = character(0), 
+  Family = character(0), 
+  Genus = character(0),
+  ASV = character(0))
+
+for(i in 1:nrow(distinct_hits)){
+  temp_tab = tax_table(tar_read(ncer_phyloseqs)[[distinct_hits$Level[i]]]) %>% 
+    data.frame %>% 
+    rownames_to_column() %>% 
+    filter(rowname == distinct_hits$Taxon[i])
+  
+  class_tab = class_tab %>% full_join(temp_tab)
+}
+
+class_tab %>% 
+  mutate(Taxon = rowname) %>% 
+  select(Taxon, Domain, Phylum, Class, Order, Family, Genus) %>% 
+  kable(booktabs = TRUE, "html") %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+```
+
+## Table 7. First Languages Spoken.
+
+```{r language, include=TRUE, results=TRUE}
+tar_read(ncer_adiv) %>% 
+  select(First_language, MCI) %>% 
+  table() %>% 
+  kable(booktabs = TRUE, "html") %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+```
+
+## Figure 1. Alpha Diversity Across Education Groups.
+
+```{r adiv edu, fig.align='center', fig.height=10, fig.width=5, results=TRUE, include=TRUE}
+comparisons = "0-10"
+
+#png(filename = paste0("./plots/20230910/alpha_by_edu.png"), width = 8, height = 14, res = 600, units = "in")
+grid.arrange(
+  mean_cl_and_bees(tar_read(ncer_adiv), "Years_of_Education", "Chao1", "t.test", comparisons = comparisons),
+  mean_cl_and_bees(tar_read(ncer_adiv), "Years_of_Education", "Shannon", "t.test", comparisons = comparisons),
+  mean_cl_and_bees(tar_read(ncer_adiv), "Years_of_Education", "InvSimpson", "t.test", comparisons = comparisons),
+  nrow = 3)
+#dev.off()
+```
+
+Note. Panels show results stratified by education groups with 0-10, 11-16 and 16+ years of education. Reported P values refer to Student’s t-Tests. InvSimpson = Inverse Simpson. Author MK.
+
+## Figure 2. Ordination Plots for MCI and Age Groups. {.tabset}
+
+Ordination using Non-metric Multidimensional Scaling based on Bray-Curtis dissimilarity. P value (adonis2) adjusted for MCI, education, gender, age, ATB, BDI-I, first language, PS, APOE. Authors MK and VTEA.
+
+### A MCI
+
+```{r ord MCI, results=TRUE, include=TRUE, fig.align='center', fig.width=5, fig.height=5}
+# additionally for MCI
+# plot ordination custom (adonis2 & NMDS)
+# multivariate homogeneity of groups dispersions, tested with anova:
+set.seed(1)
+betadisper <- betadisper(hc_ord$dist, as(sample_data(hc_ord$phyloseq), "data.frame")$MCI)
+anova(betadisper) %>% 
+  kable(digits = c(0, 2, 2, 2, 3), booktabs = TRUE) %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+
+### use this instead to also correct for YEDU
+res <- adonis2(hc_ord$dist ~ 
+                 MCI + Years_of_Education + Gender + Age + ATB_in_last_6_months + BDI_I_mild +
+                 First_Language + Living_With_Partner + APOE4,
+  data = as(sample_data(hc_ord$phyloseq), "data.frame"),
+  perm = 999, by = "margin")
+
+# Plot
+var = "MCI"
+beta_mci = plot_ordination(hc_ord$phyloseq, hc_ord$ord, color = var) +
+    theme_bw(base_size = 14) + 
+    coord_fixed() +
+    stat_ellipse() +
+    scale_color_manual(name = "MCI Groups", values = group_cols[[var]]) +
+    labs(caption = paste("p (adonis2) =", format(round(res[1,5], digits = 3), nsmall = 3), "\n", "stress =", format(round(hc_ord$ord$stress, digits = 2), nsmall = 2))) + 
+    theme(panel.grid = element_blank())
+
+#png(filename = paste0("./plots/20230910/plot_beta_mci.png"), width = 5, height = 5, res = 600, units = "in")
+beta_mci
+#dev.off()
+```
+
+### B Age
+
+```{r ord age, results=TRUE, include=TRUE, fig.align='center', fig.width=5, fig.height=5}
+# additionally for age groups
+# plot ordination custom (adonis2 & NMDS)
+# multivariate homogeneity of groups dispersions, tested with anova:
+set.seed(111)
+betadisper <- betadisper(hc_ord$dist, as(sample_data(hc_ord$phyloseq), "data.frame")$Age_categorical)
+anova(betadisper) %>% 
+  kable(digits = c(0, 2, 2, 2, 3), booktabs = TRUE) %>% 
+  kable_classic(full_width = FALSE, html_font = "arial") %>% 
+  kable_styling(font_size = 16, position = "l") %>% 
+  row_spec(0, bold = TRUE)
+
+### use this instead to also correct for YEDU and categorical instead of continuous age
+res <- adonis2(
+  as.formula(hc_ord$dist ~ 
+               Age_categorical + Years_of_Education + Gender + ATB_in_last_6_months + BDI_I_mild + 
+               First_Language + Living_With_Partner + APOE4),
+  data = as(sample_data(hc_ord$phyloseq), "data.frame"),
+  perm = 999, by = "margin")
+
+# Plot
+var = "Age_categorical"
+beta_age = plot_ordination(hc_ord$phyloseq, hc_ord$ord, color = var) +
+    theme_bw(base_size = 14) + 
+    coord_fixed() +
+    stat_ellipse() +
+    scale_color_manual(name = "Age Groups", values = group_cols[[var]]) +
+    labs(caption = paste("p (adonis2) =", format(round(res[1,5], digits = 3), nsmall = 3), "\n", "stress =", format(round(tar_read(ncer_bdiv)$ord$stress, digits = 2), nsmall = 2))) + 
+    theme(panel.grid = element_blank())
+
+#png(filename = paste0("./plots/20230910/plot_beta_age.png"), width = 5, height = 5, res = 600, units = "in")
+beta_age
+#dev.off()
+```
+
+## Figure 3. Relative Abundance Across Groups of Education. {.tabset}
+
+```{r abund, include=TRUE, echo=FALSE}
+tax_ra = sample_data(tar_read(ncer_phyloseqs)$Genus) %>% data.frame()
+for(i in 1:nrow(top_hits)){
+  Taxon = top_hits[i, "Taxon"]
+  Level = top_hits[i, "Level"]
+  tax_ra = tax_ra %>% 
+    mutate(
+      !!sym(Taxon) := getTaxRA(taxon = Taxon, 
+                               level = Level, 
+                               phylo_obj = tar_read(ncer_phyloseqs)[[Level]]))
+}
+
+top_hits = top_hits$Taxon %>% unique
+#png(filename = "./plots/20230910/plots_ra.png", width = 10, height = 15, res = 600, units = "in")
+#plot_grid(plot_ra_hits(1), 
+#          plot_ra_hits(2), 
+#          plot_ra_hits(3), 
+#          plot_ra_hits(4), 
+#          plot_ra_hits(5), 
+#          plot_ra_hits(6), 
+#          plot_ra_hits(7), 
+#          plot_ra_hits(8), 
+#          nrow = 4, ncol = 2)
+#dev.off()
+```
+
+```{r abund plots, results='asis', include=TRUE, fig.align='center', fig.width=5, fig.height=5}
+c <- 0
+for(i in 1:length(top_hits)){
+  c <- c + 1
+  cat(paste0("### ", top_hits[c], "\n"))
+  cat("\n")
+  
+  p = plot_ra_hits(i)
+  print(p)
+  cat("\n")
+  cat("\n")
+}
+```
+
+## End {.tabset}
